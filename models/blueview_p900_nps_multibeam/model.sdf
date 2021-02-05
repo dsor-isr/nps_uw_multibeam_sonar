@@ -37,14 +37,14 @@
           <!-- 90 degrees for the M900-90 -->
           <horizontal_fov>1.57079632679</horizontal_fov>
           <image>
-            <width>512</width>
+            <width>1024</width>
             <!-- Set vertical FOV by setting image height -->
             <!-- For 20 deg. -->
-            <height>114</height>
+            <height>228</height>
             <format>R8G8B8</format>
           </image>
           <clip>
-            <near>02</near>            <!-- optimal 2m-60m -->
+            <near>02</near> <!-- optimal 2m-60m -->
             <far>60</far>
           </clip>
           <depth_camera>
@@ -62,7 +62,7 @@
           <sourceLevel>220</sourceLevel>
           <maxDistance>10</maxDistance>
           <constantReflectivity>true</constantReflectivity>
-          <raySkips>10</raySkips>
+          <raySkips>5</raySkips>
           <sensorGain>0.02</sensorGain>
           <plotScaler>10</plotScaler>
           <writeLog>false</writeLog>
