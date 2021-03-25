@@ -12,17 +12,13 @@
       </inertial>
       <visual>
         <geometry>
-          <mesh>
-            <uri>model://oculus_m1200d_nps_multibeam/meshes/p900.dae</uri>
-          </mesh>
+          <mesh filename="package://nps_uw_multibeam_sonar/models/oculus_m1200d_nps_multibeam/meshes/p900.dae"/>
         </geometry>
         <origin xyz="${xyz}" rpy="${rpy}"/>
       </visual>
       <collision>
         <geometry>
-          <mesh>
-            <uri>model://oculus_m1200d_nps_multibeam/meshes/COLLISION-p900.dae</uri>
-          </mesh>
+          <mesh filename="package://nps_uw_multibeam_sonar/models/oculus_m1200d_nps_multibeam/meshes/COLLISION-p900.dae"/>
         </geometry>
         <origin xyz="${xyz}" rpy="${rpy}"/>
       </collision>
@@ -59,7 +55,7 @@
             <path>/tmp/camera</path>
           </save>
         </camera>
-        <plugin filename="libnps_multibeam_sonar_ros_plugin.so" name="multibeam_sonar">
+        <plugin filename="libnps_multibeam_sonar_ros_plugin.so" name="${name}_sensor_controller">
           <!-- Sonar properties -->
           <sonarFreq>2100e3</sonarFreq>
           <bandwidth>265.5e3</bandwidth>
@@ -85,7 +81,8 @@
           <depthImageCameraInfoTopicName>image_depth/camera_info</depthImageCameraInfoTopicName>
           <sonarImageRawTopicName>sonar_image_raw</sonarImageRawTopicName>
           <sonarImageTopicName>sonar_image</sonarImageTopicName>
-          <frameName>multibeam_sonar_frame</frameName>
+          <frameName>${name}_link</frameName>
+          <pointcloudFrame>${robot_link}</pointcloudFrame>
         </plugin>
       </sensor>
     </gazebo>
@@ -100,10 +97,62 @@
     </joint>
   </xacro:macro>
 
+  <xacro:macro name="oculus_m1200d_beam_visual_link">
+    <link name="ray_link">
+      <inertial>
+        <mass value="0.00001"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.00000000017" ixy="0" ixz="0" iyy="0.00000000017" iyz="0" izz="0.00000000017"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <xacro:macro name="oculus_m1200d_beam_visual_joint"
+               params="name">
+    <joint name="ray_joint" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${name}_link"/>
+      <child link="ray_link"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="oculus_m1200d_beam_visual_ray"
+               params="ray_visual">
+    <gazebo reference="ray_link">
+      <sensor type="ray" name="multibeam_sonar_ray">
+        <pose>0 0 0 0 0 0</pose>
+        <update_rate>10</update_rate>
+        <visualize>${ray_visual}</visualize>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>4</samples>
+              <resolution>1</resolution>
+              <min_angle>-0.5235987756</min_angle>
+              <max_angle>0.5235987756</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>4</samples>
+              <resolution>1</resolution>
+              <min_angle>-0.10471975512</min_angle>
+              <max_angle>0.10471975512</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.7</min>
+            <max>90</max>
+            <resolution>0.01</resolution>
+          </range>
+        </ray>
+      </sensor>
+    </gazebo>
+
+  </xacro:macro>
+
   <!-- Top level macro for generating the link, sensor, joint combo
        The macro will create the link, joint, and sensor -->
   <xacro:macro name="dave_multibeam_oculus_m1200d"
-               params="name xyz rpy robot_link joint_xyz joint_rpy update_rate plotScaler maxDistance constantReflectivity reflectivityDatabaseFile raySkips sensorGain">
+               params="name xyz rpy robot_link joint_xyz joint_rpy ray_visual update_rate plotScaler maxDistance constantReflectivity reflectivityDatabaseFile raySkips sensorGain">
     <xacro:oculus_m1200d_link name="${name}" xyz="${xyz}" rpy="${rpy}" />
     <xacro:oculus_m1200d_joint name="${name}" robot_link="${robot_link}" joint_xyz="${joint_xyz}" joint_rpy="${joint_rpy}"/>
     <xacro:oculus_m1200d_sensor name="${name}"
@@ -112,6 +161,10 @@
                                plotScaler="${plotScaler}" maxDistance="${maxDistance}"
                                constantReflectivity="${constantReflectivity}" reflectivityDatabaseFile="${reflectivityDatabaseFile}"
                                raySkips="${raySkips}" sensorGain="${sensorGain}"/>
+
+    <xacro:oculus_m1200d_beam_visual_link/>
+    <xacro:oculus_m1200d_beam_visual_joint name="${name}"/>
+    <xacro:oculus_m1200d_beam_visual_ray ray_visual="${ray_visual}"/>
   </xacro:macro>
 
 </robot>

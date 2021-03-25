@@ -16,13 +16,15 @@
       </inertial>
       <collision name="collision">
         <geometry>
-          <mesh filename="package://nps_uw_multibeam_sonar/models/oculus_m1200d_nps_multibeam/meshes/COLLISION-p900.dae"/>
+          <mesh>
+            <uri>model://oculus_m1200d_nps_multibeam/meshes/COLLISION-p900.dae</uri>
+          </mesh>
         </geometry>
       </collision>
       <visual name="visual">
         <geometry>
           <mesh>
-          <mesh filename="package://nps_uw_multibeam_sonar/models/oculus_m1200d_nps_multibeam/meshes/p900.dae"/>
+            <uri>model://oculus_m1200d_nps_multibeam/meshes/p900.dae</uri>
           </mesh>
         </geometry>
       </visual>
