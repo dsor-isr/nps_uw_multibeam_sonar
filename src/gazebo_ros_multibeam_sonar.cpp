@@ -27,8 +27,6 @@
 #include <nps_uw_multibeam_sonar/sonar_calculation_cuda.cuh>
 
 #include <opencv2/core/core.hpp>
-#include <boost/thread/thread.hpp>
-#include <boost/bind.hpp>
 
 #include <nps_uw_multibeam_sonar/gazebo_ros_multibeam_sonar.hh>
 #include <gazebo/sensors/Sensor.hh>
@@ -548,7 +546,11 @@ void NpsGazeboRosMultibeamSonar::OnNewDepthFrame(const float *_image,
       this->ComputePointCloud(_image);
 
       if (this->depth_image_connect_count_ > 0)
-        this->ComputeSonarImage(_image);
+      {
+        // this->ComputeSonarImage(_image);
+        std::thread t(&NpsGazeboRosMultibeamSonar::ComputeSonarImage, this, _image);
+        t.detach();
+      }
     }
   }
   else
