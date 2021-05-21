@@ -843,7 +843,7 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
   cv_bridge::CvImage img_bridge;
 
   // Generate image of 16UC1
-  cv::Mat Intensity_image = cv::Mat::zeros(cv::Size(nBeams, nFreq), CV_16UC1);
+  cv::Mat Intensity_image = cv::Mat::zeros(cv::Size(round(16.0/9.0*nBeams), nBeams), CV_16UC1);
 
   const float rangeMax = maxDistance;
   const float rangeRes = ranges[1]-ranges[0];
