@@ -200,6 +200,11 @@ void NpsGazeboRosMultibeamSonar::Load(sensors::SensorPtr _parent,
   else
     this->maxDistance =
       _sdf->GetElement("maxDistance")->Get<double>();
+  if (!_sdf->HasElement("minDistance"))
+    this->minDistance = 2;
+  else
+    this->minDistance =
+      _sdf->GetElement("minDistance")->Get<double>();
   if (!_sdf->HasElement("sourceLevel"))
     this->sourceLevel = 220;
   else
@@ -543,8 +548,16 @@ void NpsGazeboRosMultibeamSonar::OnNewDepthFrame(const float *_image,
     }
     else
     {
+      auto start = std::chrono::high_resolution_clock::now();
       this->ComputePointCloud(_image);
-
+      auto stop = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<
+                      std::chrono::microseconds>(stop - start);
+      if (debugFlag)
+      {
+        ROS_INFO_STREAM("CPU Point Cloud computation " <<
+                        duration.count()/10000 << "/100 [s]");
+      }
       if (this->depth_image_connect_count_ > 0)
       {
         // this->ComputeSonarImage(_image);
@@ -692,7 +705,7 @@ void NpsGazeboRosMultibeamSonar::OnNewImageFrame(const unsigned char *_image,
 // Most of the plugin work happens here
 void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
 {
-  this->lock_.lock();
+  auto start_total = std::chrono::high_resolution_clock::now();
   cv::Mat depth_image = this->point_cloud_image_;
   cv::Mat normal_image = this->ComputeNormalImage(depth_image);
   double vFOV = this->parentSensor->DepthCamera()->VFOV().Radian();
@@ -714,6 +727,7 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
   if (this->reflectivityImage.rows == 0)
     this->reflectivityImage = cv::Mat(width, height, CV_32FC1, cv::Scalar(this->mu));
 
+  this->lock_.lock();
   // For calc time measure
   auto start = std::chrono::high_resolution_clock::now();
   // ------------------------------------------------//
@@ -756,6 +770,7 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
     ROS_INFO_STREAM("GPU Sonar Frame Calc Time " <<
                     duration.count()/10000 << "/100 [s]\n");
   }
+    this->lock_.unlock();
 
   // CSV log write stream
   // Each cols corresponds to each beams
@@ -797,6 +812,7 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
   }
 
   // Sonar image ROS msg
+  start = std::chrono::high_resolution_clock::now();
   this->sonar_image_raw_msg_.header.frame_id
         = this->frame_name_.c_str();
   this->sonar_image_raw_msg_.header.stamp.sec
@@ -838,20 +854,44 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
 
   this->sonar_image_raw_pub_.publish(this->sonar_image_raw_msg_);
 
+  // For calc time measure
+  stop = std::chrono::high_resolution_clock::now();
+  duration = std::chrono::duration_cast<
+                  std::chrono::microseconds>(stop - start);
+  if (debugFlag)
+  {
+    ROS_INFO_STREAM("CPU Sonar Image Raw Frame Calc Time " <<
+                    duration.count()/10000 << "/100 [s]");
+  }
 
+  start = std::chrono::high_resolution_clock::now();
   // Construct visual sonar image for rqt plot in sensor::image msg format
   cv_bridge::CvImage img_bridge;
 
-  // Generate image of 16UC1
-  cv::Mat Intensity_image = cv::Mat::zeros(cv::Size(round(16.0/9.0*nBeams), nBeams), CV_16UC1);
+  // Generate image of 8UC1 with aspect ratio of 16/9
+  // cv::Mat Intensity_image = cv::Mat::zeros(cv::Size(round(16.0/9.0*nBeams), nBeams), CV_8UC1);
+  cv::Mat Intensity_image = cv::Mat::zeros(cv::Size(960, 540), CV_8UC1);
 
   const float rangeMax = maxDistance;
+  const float rangeMin = minDistance;
   const float rangeRes = ranges[1]-ranges[0];
   const int nEffectiveRanges = ceil(rangeMax / rangeRes);
   const unsigned int radius = Intensity_image.size().height;
+  const unsigned int min_radius = round(minDistance/maxDistance*Intensity_image.size().height);
   const cv::Point origin(Intensity_image.size().width/2,
                          Intensity_image.size().height);
+  const cv::Point top_left(Intensity_image.size().width/2 - round(radius*(sin(hFOV/2))),
+                          round(radius*(1-cos(hFOV/2))));
+  const cv::Point top_right(Intensity_image.size().width/2 + round(radius*(sin(hFOV/2))),
+                          round(radius*(1-cos(hFOV/2))));
+  const cv::Point bottom_left(Intensity_image.size().width/2 - round(minDistance/maxDistance*radius*(sin(hFOV/2))),
+                          radius - round(minDistance/maxDistance*radius*(cos(hFOV/2))));
+  const cv::Point bottom_right(Intensity_image.size().width/2 + round(minDistance/maxDistance*radius*(sin(hFOV/2))),
+                          radius - round(minDistance/maxDistance*radius*(cos(hFOV/2))));
   const float binThickness = 2 * ceil(radius / nEffectiveRanges);
+
+  int thickness = 1.0;
+  int lineType = cv::LINE_AA;
 
   struct BearingEntry
   {
@@ -900,10 +940,31 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
       // Assume angles are in image frame x-right, y-down
       cv::ellipse(Intensity_image, origin, cv::Size(rad, rad), 0,
                   begin * 180/M_PI, end * 180/M_PI,
-                  intensity*256*this->plotScaler,
-                  binThickness);
+                  intensity*this->plotScaler,
+                  binThickness,
+                  lineType);
     }
   }
+
+  // Cover points below minimum distance
+  cv::ellipse(Intensity_image, origin, cv::Size(min_radius, min_radius), 0,
+                (ThetaShift-hFOV/2) * 180/M_PI, (ThetaShift+hFOV/2) * 180/M_PI,
+                0,
+                -1);
+
+  // Draw frame for sonar image
+  cv::line( Intensity_image, bottom_left, top_left, 128, thickness, lineType );
+  cv::line( Intensity_image, bottom_right, top_right, 128, thickness, lineType );
+  cv::ellipse(Intensity_image, origin, cv::Size(radius, radius), 0,
+                (ThetaShift-hFOV/2) * 180/M_PI, (ThetaShift+hFOV/2) * 180/M_PI,
+                128,
+                thickness,
+                lineType);
+  cv::ellipse(Intensity_image, origin, cv::Size(min_radius, min_radius), 0,
+                (ThetaShift-hFOV/2) * 180/M_PI, (ThetaShift+hFOV/2) * 180/M_PI,
+                128,
+                thickness,
+                lineType);
 
   // Publish final sonar image
   this->sonar_image_msg_.header.frame_id
@@ -913,12 +974,22 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
   this->sonar_image_msg_.header.stamp.nsec
         = this->depth_sensor_update_time_.nsec;
   img_bridge = cv_bridge::CvImage(this->sonar_image_msg_.header,
-                                  sensor_msgs::image_encodings::MONO16,
+                                  sensor_msgs::image_encodings::MONO8,
                                   Intensity_image);
   // from cv_bridge to sensor_msgs::Image
   img_bridge.toImageMsg(this->sonar_image_msg_);
 
   this->sonar_image_pub_.publish(this->sonar_image_msg_);
+
+  // For calc time measure
+  stop = std::chrono::high_resolution_clock::now();
+  duration = std::chrono::duration_cast<
+                  std::chrono::microseconds>(stop - start);
+  if (debugFlag)
+  {
+    ROS_INFO_STREAM("CPU Sonar Image Display Frame Calc Time " <<
+                    duration.count()/10000 << "/100 [s]");
+  }
 
   // ---------------------------------------- End of sonar calculation
 
@@ -953,7 +1024,16 @@ void NpsGazeboRosMultibeamSonar::ComputeSonarImage(const float *_src)
   // from cv_bridge to sensor_msgs::Image
   this->normal_image_pub_.publish(this->normal_image_msg_);
 
-  this->lock_.unlock();
+  auto stop_total = std::chrono::high_resolution_clock::now();
+  duration = std::chrono::duration_cast<
+                  std::chrono::microseconds>(stop_total - start_total);
+  if (debugFlag)
+  {
+    ROS_INFO_STREAM("Sonar Total Time " <<
+                    duration.count()/10000 << "/100 [s]");
+    ROS_INFO_STREAM("Sonar Total Rate " <<
+                    floor(1000000/duration.count()) << " [fps]");
+  }
 }
 
 

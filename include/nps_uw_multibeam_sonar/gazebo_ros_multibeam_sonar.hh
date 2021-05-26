@@ -134,6 +134,7 @@ namespace gazebo
     private: double bandwidth;
     private: double soundSpeed;
     private: double maxDistance;
+    private: double minDistance;
     private: double sourceLevel;
     private: bool constMu;
     private: double absorption;
