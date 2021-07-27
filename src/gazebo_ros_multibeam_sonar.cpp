@@ -369,7 +369,7 @@ void NpsGazeboRosMultibeamSonar::Load(sensors::SensorPtr _parent,
       struct stat buffer;
       std::string logfilename("/tmp/SonarRawData_000001.csv");
       if (stat (logfilename.c_str(), &buffer) == 0)
-        system("rm /tmp/SonarRawData*.csv");
+        bool res = system("rm /tmp/SonarRawData*.csv");
     }
   }
 
